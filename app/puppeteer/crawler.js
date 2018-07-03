@@ -25,6 +25,7 @@ async function pageScreenshotAndHTML(url,cb) {
   await browser.close();
   cb(screenshot,html);
 }
+
 module.exports = {
   pageScreenshot: pageScreenshot,
   pageHTML: pageHTML,
