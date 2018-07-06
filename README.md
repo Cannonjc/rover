@@ -9,3 +9,5 @@ npm install
 then 
 
 npm run dev
+
+to run the dev environment. Found on localhost:8000
