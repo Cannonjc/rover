@@ -6,8 +6,16 @@ After cloning, run:
 
 npm install
 
-then 
+then
 
 npm run dev
 
 to run the dev environment. Found on localhost:8000
+
+to run the dev environment with a specific port(like 3000), run:
+
+PORT=3000 npm run dev
+
+to run this in non-dev mode, and with a specified port, run:
+
+PORT=3000 npm start
