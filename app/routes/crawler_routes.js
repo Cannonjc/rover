@@ -25,4 +25,8 @@ module.exports = function(app) {
       res.send(obj);
     });
   });
+  app.post('/crawl/crawl_site', (req,res) => {
+    console.log(req.body);
+    crawler.mainCrawl(req.body);
+  });
 };
