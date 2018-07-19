@@ -1,0 +1,7 @@
+{"start_url":"https://hrlb.oregon.gov/bspa/licenseelookup/",
+"form":{"text_field":{"//td[2]/input[1]": "a"}, "select": {"//td[select]/select": "lastname"}, "submit": "/html/body/table/tbody/tr[3]/td/table/tbody/tr/td/form/table/tbody/tr[3]/td/div/input"
+},
+"screenshot":"index_screenshot",
+"html":"index_html",
+"record_links":{"links_selector": "//table[2]//tr[td[a]]//td[1]/a", "record": {"screenshot": "record_screenshot", "html": "record_html", "save_and_erase": "save_and_erase"}}
+}
