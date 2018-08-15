@@ -63,6 +63,10 @@ async function decider(page, key, params) {
       break;
     case 'save_and_erase':
       await save_and_erase();
+      break;
+    case 'click':
+      await page.click(xPathToCss(params[key]));
+      break;
     // case 'record_detail_links':
       // await traverseLinks();
       // break;
