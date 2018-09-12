@@ -131,10 +131,11 @@ async function traverseLinks(page, linksInfo) {
     // We need the index for each link, so we need to just send the record after each time it goes to the details page
     sendRecord(i,storage['records_screenshot'],storage['records_html'],storage['details_screenshot'],storage['details_html']);
   }
-  if (nextPageExists) {
-    await nextPage(page);
-    delete storage['records_html'];
-    delete storage['records_screenshot'];
+  if (await nextPageExists(page)) {
+    console.log("MORE");
+    storage['records_html'] = await page.content();
+    storage['records_screenshot'] = await page.screenshot({fullPage:true});
+    await traverseLinks(page, linksInfo)
   }
 };
 async function goToDetailsPage(page,link, linkInfo) {
@@ -151,23 +152,23 @@ async function goToDetailsPage(page,link, linkInfo) {
 		page.goBack()
 	]);
 };
-async function nextPageExists() {
+async function nextPageExists(page) {
+  console.log("exists?")
   if (initData.nextPage) {
-    if (await page.$(initData.nextPage) !== null) {
+    try {
+      await page.click(convertXPath(initData.nextPage,setErrorInRecipe))
+      console.log("next page")
+      pageNum+=1;
       return true;
+    } catch(e) {
+      console.log("no next page")
+      return false;
     }
   }
   return false;
 }
-async function nextPage(page) {
-  await Promise.all([
-    page.waitForNavigation(),
-    page.click(convertXPath(initData.nextPage,setErrorInRecipe))
-  ]);
-  pageNum+=1;
-}
 async function sendRecord(index,recordsScreenshot, recordsHtml, detailsScreenshot, detailsHtml) {
-  console.log("sending");
+  console.log("sending ", index);
   console.log(initData.respondUrl);
   let buffedRS = Buffer.from(recordsScreenshot).toString('base64');
   let buffedRH = Buffer.from(recordsHtml).toString('base64');
