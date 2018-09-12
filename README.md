@@ -19,3 +19,6 @@ PORT=3000 npm run dev
 to run this in non-dev mode, and with a specified port, run:
 
 PORT=3000 npm start
+
+
+If sending to Hoover - need to start hoover local with rails s -b 0.0.0.0 -s 3003, unless Hoover is updated/fixed

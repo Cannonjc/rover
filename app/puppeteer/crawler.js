@@ -6,7 +6,7 @@ const axios = require('axios');
 
 let recipe = {};
 let storage = {};
-let recordCount = 1;
+let pageNum = 0;
 let initData = {};
 
 async function pageScreenshot(url, cb) {
@@ -108,6 +108,7 @@ async function initialize(params) {
     initData.respondUrl = params['respond_url'];
     initData.errorUrl = params['error_url'];
     initData.crawlID = params['crawl_id'];
+    if (params['next_page']) initData.nextPage = params['next_page']
   } else {
     await setErrorInRecipe("Initialize data is not complete");
   }
@@ -130,6 +131,11 @@ async function traverseLinks(page, linksInfo) {
     // We need the index for each link, so we need to just send the record after each time it goes to the details page
     sendRecord(i,storage['records_screenshot'],storage['records_html'],storage['details_screenshot'],storage['details_html']);
   }
+  if (nextPageExists) {
+    await nextPage(page);
+    delete storage['records_html'];
+    delete storage['records_screenshot'];
+  }
 };
 async function goToDetailsPage(page,link, linkInfo) {
   console.log('going to link: ', link);
@@ -144,6 +150,45 @@ async function goToDetailsPage(page,link, linkInfo) {
 		page.waitForNavigation(),
 		page.goBack()
 	]);
+};
+async function nextPageExists() {
+  if (initData.nextPage) {
+    if (await page.$(initData.nextPage) !== null) {
+      return true;
+    }
+  }
+  return false;
+}
+async function nextPage(page) {
+  await Promise.all([
+    page.waitForNavigation(),
+    page.click(convertXPath(initData.nextPage,setErrorInRecipe))
+  ]);
+  pageNum+=1;
+}
+async function sendRecord(index,recordsScreenshot, recordsHtml, detailsScreenshot, detailsHtml) {
+  console.log("sending");
+  console.log(initData.respondUrl);
+  let buffedRS = Buffer.from(recordsScreenshot).toString('base64');
+  let buffedRH = Buffer.from(recordsHtml).toString('base64');
+  let buffedDS = Buffer.from(detailsScreenshot).toString('base64');
+  let buffedDH = Buffer.from(detailsHtml).toString('base64');
+  axios({
+    method: 'post',
+    url: initData.respondUrl,
+    data: {
+      crawl_id: initData.crawlID,
+      link_num: index,
+      page_num: pageNum,
+      records_screenshot: buffedRS,
+      records_html: buffedRH,
+      details_screenshot: buffedDS,
+      details_html: buffedDH
+    }
+  }).catch(function (error) {
+    // handle error
+    console.log(error);
+  });
 };
 
 async function fillForm(page,keyValues) {
@@ -185,61 +230,19 @@ async function selectFill(page, selectorsValues) {
   }
 };
 
-async function save_and_erase() {
-  let path = await 'screenshots/item'+recordCount;
-  await makeDirectory(path);
-  await makeDirectory(path+'/base');
-  await makeDirectory(path+'/record');
-  await saveFile(path+'/base/base.html',storage['records_html']);
-  await saveFile(path+'/base/base.png',storage['records_screenshot']);
-  await saveFile(path+'/record/record.html',storage['details_html']);
-  await saveFile(path+'/record/record.png',storage['details_screenshot']);
-  delete storage['record_html'];
-  delete storage['record_screenshot'];
-  await recordCount++;
-};
-async function sendRecord(index,recordsScreenshot, recordsHtml, detailsScreenshot, detailsHtml) {
-  console.log("sending");
-  console.log(initData.respondUrl);
-  let buffedRS = Buffer.from(recordsScreenshot).toString('base64');
-  let buffedRH = Buffer.from(recordsHtml).toString('base64');
-  let buffedDS = Buffer.from(detailsScreenshot).toString('base64');
-  let buffedDH = Buffer.from(detailsHtml).toString('base64');
-  // let breeds = await axios.get('http://localhost:3003/api/v1/crawls')
-  // console.log(breeds);
-  // axios({
-  //   method: 'post',
-  //   url: initData.respondUrl,
-  //   data: {
-  //     crawl_id: initData.crawlID
-  //   }
-  // }).catch(function (error) {
-  //   // handle error
-  //   console.log(error);
-  // });
-  axios({
-    method: 'post',
-    url: initData.respondUrl,
-    // url: "/api/v1/crawls/rover_page",
-    // proxy: {
-    //   host: '127.0.0.1',
-    //   port: 3003
-    // },
-    data: {
-      crawl_id: initData.crawlID,
-      link_num: index,
-      records_screenshot: buffedRS,
-      records_html: buffedRH,
-      details_screenshot: buffedDS,
-      details_html: buffedDH
-    }
-  }).catch(function (error) {
-    // handle error
-    console.log(error);
-  });
-};
-
-
+// async function save_and_erase() {
+//   let path = await 'screenshots/item'+recordCount;
+//   await makeDirectory(path);
+//   await makeDirectory(path+'/base');
+//   await makeDirectory(path+'/record');
+//   await saveFile(path+'/base/base.html',storage['records_html']);
+//   await saveFile(path+'/base/base.png',storage['records_screenshot']);
+//   await saveFile(path+'/record/record.html',storage['details_html']);
+//   await saveFile(path+'/record/record.png',storage['details_screenshot']);
+//   delete storage['record_html'];
+//   delete storage['record_screenshot'];
+//   await recordCount++;
+// };
 // async function makeDirectory(path) {
 // 	mkdirp(path, function(err) {
 // 		if (err) throw err;
