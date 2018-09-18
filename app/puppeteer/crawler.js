@@ -80,7 +80,7 @@ async function decider(page, key, params) {
       await traverseLinks(page, params[key]);
       break;
     case 'click':
-      await page.click(convertXPath(params[key], setErrorInRecipe)).catch(e => console.log('Click error on: ',params[key]));
+      await click(page, params[key]);
       break;
     // case 'save_and_erase':
     //   await save_and_erase();
@@ -223,7 +223,7 @@ async function fillForm(page,keyValues) {
           await selectFill(page, keyValues[key]);
           break;
         case 'submit':
-          await page.click(convertXPath(keyValues[key],setErrorInRecipe));
+          await click(page,keyValues[key]);
           break;
         default:
           break;
@@ -273,6 +273,10 @@ async function goBack(page) {
   		page.goBack()
   	]);
   }
+}
+
+async function click(page,selector) {
+  await page.click(convertXPath(selector, setErrorInRecipe)).catch(e => console.log('Click error on: ',selector));
 }
 
 // async function save_and_erase() {
