@@ -31,7 +31,7 @@ module.exports = function(app) {
       if (responseMessage.length > 1) {
         res.status(400);
         res.contentType('text/html');
-        res.send(error);
+        res.send(responseMessage);
       } else {
         res.contentType('text/html');
         res.send('Information received, rover crawl started');
