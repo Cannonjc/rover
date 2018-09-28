@@ -1,39 +1,73 @@
 const puppeteer = require('puppeteer');
 const xPathToCss = require('xpath-to-css');
-const fs = require('fs');
-const mkdirp = require('mkdirp');
 const axios = require('axios');
+
+class Crawler {
+  async constructor(crawl) {
+    const browser = await puppeteer.launch();
+    this.commandList = crawl.commandList;
+    this.state = {
+      page : await browser.newPage(),
+      startUrl : crawl.startUrl,
+      respondUrl : crawl.respondUrl,
+      errorUrl : crawl.errorUrl,
+      crawlID : crawl.crawlID,
+      dimensionID : crawl.dimensionID,
+      storage : {},
+      nextPage : crawl.nextPage || '',
+      backButton : crawl.backButton || '',
+      pageNum : 0,
+      formsList : crawl.formsList,
+      formsCount : 0,
+      clicksList : crawl.clicksList,
+      clicksCount : 0
+    }
+
+  }
+
+  async startCrawl() {
+    this.commandList.reduce( (chain, currentFunc) => {
+      return chain.then((state) => {
+        return Crawler.decider(currentFunc, state);
+      });
+    }, Promise.resolve(this.state));
+
+  }
+
+
+  this.commandList.reduce(async (sum, currentFunc) => {
+    const newState = await Crawler.decider(currentFunc,sum) ;
+    return newState;
+  }, state);
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 let recipe = {};
 let storage = {};
 let pageNum = 0;
 let initData = {};
-
-async function pageScreenshot(url, cb) {
-  const browser = await puppeteer.launch();
-  const page = await browser.newPage();
-  await page.goto(url);
-  let screenshot = await page.screenshot({fullPage: true});
-  await browser.close();
-  cb(screenshot);
-};
-async function pageHTML(url, cb) {
-  const browser = await puppeteer.launch();
-  const page = await browser.newPage();
-  await page.goto(url);
-  let html = await page.content();
-  await browser.close();
-  cb(html);
-};
-async function pageScreenshotAndHTML(url,cb) {
-  const browser = await puppeteer.launch();
-  const page = await browser.newPage();
-  await page.goto(url);
-  let screenshot = await page.screenshot({fullPage: true});
-  let html = await page.content();
-  await browser.close();
-  cb(screenshot,html);
-};
 
 async function mainCrawl(params, cb) {
   if (checkInitData(params['initialize'])) {
@@ -58,15 +92,11 @@ async function mainCrawl(params, cb) {
   await browser.close();
 };
 
-async function decider(page, key, params) {
-  console.log(key);
-  // console.log(params[key]);
-  switch(key) {
-    case 'initialize':
-      await initialize(params[key])
-      break;
+async function decider(currentFunc, currentState) {
+
+  switch(currentFunc) {
     case 'start_url':
-      await startUrl(page, params[key]);
+      return {...currentState, page: await startUrl(currentState.page, currentState.startUrl)};
       break;
     case 'form':
       await fillForm(page, params[key]);
@@ -97,36 +127,15 @@ async function decider(page, key, params) {
   }
 };
 
-function checkInitData(initialize) {
-  if (initialize['respond_url'] && initialize['error_url'] && initialize['crawl_id'] && initialize['dimension_id']) {
-    recipe = {};
-    storage = {};
-    pageNum = 0;
-    initData = {};
-    return true;
-  } else {
-    return false;
-  }
-}
-async function initialize(params) {
-  if (params['respond_url'] && params['error_url'] && params['crawl_id'] && params['dimension_id']) {
-    initData.respondUrl = params['respond_url'];
-    initData.errorUrl = params['error_url'];
-    initData.crawlID = params['crawl_id'];
-    initData.dimensionID = params['dimension_id'];
-    if (params['next_page']) initData.nextPage = params['next_page'];
-    if (params['back_button']) initData.backButton = params['back_button'];
-  } else {
-    await setErrorInRecipe("Initialize data is not complete");
-  }
-}
 
-async function startUrl(page, url) {
-  console.log("Start url: ",url)
+async function startUrl(page,url) {
+  console.log("Start url: ", url)
+  const newPage = page
   await Promise.all([
-    page.waitForNavigation(),
-    page.goto(url)
+    newPage.waitForNavigation(),
+    newPage.goto(url)
   ]);
+  return newPage;
 };
 
 async function traverseLinks(page, linksInfo) {
