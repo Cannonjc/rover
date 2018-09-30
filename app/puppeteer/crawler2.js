@@ -4,10 +4,10 @@ const axios = require('axios');
 
 class Crawler {
   async constructor(crawl) {
-    const browser = await puppeteer.launch();
+    this.browser = await puppeteer.launch();
     this.commandList = crawl.commandList;
     this.state = {
-      page : await browser.newPage(),
+      page : await this.browser.newPage(),
       startUrl : crawl.startUrl,
       respondUrl : crawl.respondUrl,
       errorUrl : crawl.errorUrl,
@@ -22,7 +22,6 @@ class Crawler {
       clicksList : crawl.clicksList,
       clicksCount : 0
     }
-
   }
 
   async startCrawl() {
@@ -31,14 +30,84 @@ class Crawler {
         return Crawler.decider(currentFunc, state);
       });
     }, Promise.resolve(this.state));
-
+    await this.browser.close();
   }
 
+  async decider(currentFunc, currentState) {
 
-  this.commandList.reduce(async (sum, currentFunc) => {
-    const newState = await Crawler.decider(currentFunc,sum) ;
-    return newState;
-  }, state);
+    switch(currentFunc) {
+      case 'start_url':
+        return {...currentState, page: await startUrl(currentState)};
+        break;
+      case 'form':
+        await fillForm(state);
+        break;
+      case 'records_screenshot':
+        return {...currentState, storage["records_screenshot"] = await currentState.page.screenshot({fullPage:true})}
+        break;
+      case 'records_html':
+        return {...currentState, storage["records_html"] = await currentState.page.content()}
+        break;
+      case 'details_screenshot':
+        return {...currentState, storage[params[key]] = await currentState.page.screenshot({fullPage:true})};
+        break;
+      case 'details_html':
+        return {...currentState, storage[params[key]] = await currentState.page.content()};
+        break;
+      case 'record_links':
+        await traverseLinks(currentState);
+        break;
+      case 'click':
+        return await click(currentState);
+        break;
+      default:
+        break;
+    }
+  }
+
+  async startUrl(state) {
+    const newPage = state.page
+    await Promise.all([
+      newPage.waitForNavigation(),
+      newPage.goto(state.startUrl)
+    ]);
+    return newPage;
+  }
+
+  async click(state) {
+    const newPage = state.page
+    const selector = state.clicksList[state.clicksCount]
+    try {
+      return {...state, page: await newPage.click(convertXPath(selector, setErrorInRecipe)), clicksCount: state.clicksCount+1};
+    } catch(e) {
+      return {...state, error: e}
+    }
+  }
+
+  async fillForm(state) {
+    console.log('filling form');
+    // console.log(keyValues);
+    const keyValues = state.form[state.formsCount]
+    for (var key in keyValues) {
+      if (recipe.error) {
+        sendError(recipe.error);
+        break;
+      } else {
+        switch(key) {
+          case 'text_field':
+            await textFieldFill(page, keyValues[key]);
+            break;
+          case 'select':
+            await selectFill(page, keyValues[key]);
+            break;
+          default:
+            break;
+        }
+      }
+    }
+  };
+
+
 
 
 }
@@ -46,97 +115,6 @@ class Crawler {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-let recipe = {};
-let storage = {};
-let pageNum = 0;
-let initData = {};
-
-async function mainCrawl(params, cb) {
-  if (checkInitData(params['initialize'])) {
-    cb("");
-  } else {
-    cb("Initialize data is not complete");
-    return;
-  }
-  recipe = params;
-  const browser = await puppeteer.launch({});
-  const page = await browser.newPage();
-
-  for (var key in recipe) {
-    if (recipe.error) {
-      sendError(recipe.error);
-      break;
-    } else {
-      await decider(page, key, recipe);
-    }
-  }
-  // await page.waitFor(4000);
-  await browser.close();
-};
-
-async function decider(currentFunc, currentState) {
-
-  switch(currentFunc) {
-    case 'start_url':
-      return {...currentState, page: await startUrl(currentState.page, currentState.startUrl)};
-      break;
-    case 'form':
-      await fillForm(page, params[key]);
-      break;
-    case 'screenshot':
-      storage[params[key]] = await page.screenshot({fullPage:true});
-      break;
-    case 'html':
-      storage[params[key]] = await page.content();
-      break;
-    case 'record_links':
-      await traverseLinks(page, params[key]);
-      break;
-    case 'click':
-      await click(page, params[key]);
-      break;
-    // case 'save_and_erase':
-    //   await save_and_erase();
-    //   break;
-    // case 'send_record':
-    //   sendRecord(storage['record_screenshot'],storage['records_html'],storage['details_screenshot'],storage['details_html']);
-    //   break;
-    // case 'record_detail_links':
-      // await traverseLinks();
-      // break;
-    default:
-      break;
-  }
-};
-
-
-async function startUrl(page,url) {
-  console.log("Start url: ", url)
-  const newPage = page
-  await Promise.all([
-    newPage.waitForNavigation(),
-    newPage.goto(url)
-  ]);
-  return newPage;
-};
 
 async function traverseLinks(page, linksInfo) {
   console.log('linksInfo');
@@ -215,32 +193,7 @@ async function sendRecord(index,recordsScreenshot, recordsHtml, detailsScreensho
   });
 };
 
-async function fillForm(page,keyValues) {
-  console.log('filling form');
-  // console.log(keyValues);
-  for (var key in keyValues) {
-    // console.log(key);
-    // console.log(keyValues[key]);
-    if (recipe.error) {
-      sendError(recipe.error);
-      break;
-    } else {
-      switch(key) {
-        case 'text_field':
-          await textFieldFill(page, keyValues[key]);
-          break;
-        case 'select':
-          await selectFill(page, keyValues[key]);
-          break;
-        case 'submit':
-          await click(page,keyValues[key]);
-          break;
-        default:
-          break;
-      }
-    }
-  }
-};
+
 async function textFieldFill(page, selectorsValues) {
   console.log('Filling text fields');
   for (var selector in selectorsValues) {
@@ -285,9 +238,7 @@ async function goBack(page) {
   }
 }
 
-async function click(page,selector) {
-  await page.click(convertXPath(selector, setErrorInRecipe)).catch(e => console.log('Click error on: ',selector));
-}
+
 
 // async function save_and_erase() {
 //   let path = await 'screenshots/item'+recordCount;
@@ -333,7 +284,7 @@ function convertXPath(xpath, cb) {
     let myConversion = xPathToCss(xpath)
     return myConversion;
   } catch(e) {
-    cb(xpath);
+    return xpath;
   }
 }
 

@@ -33,7 +33,7 @@ const CrawlSchema = mongoose.Schema({
   },
   status: {
     type: String,
-    default: "received"
+    default: 'received'
   }
   createdAt: {
     type: Date
@@ -56,10 +56,6 @@ CrawlSchema.pre('updateMany', function(next) {
   this.updatedAt = now
   next()
 })
-
-CrawlSchema.statics.addCrawl = function() {
-
-}
 
 CrawlSchema.methods.crawl = function() {
   const crawler = new Crawler(this)
