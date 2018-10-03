@@ -374,22 +374,22 @@ module.exports = {
   mainCrawl: mainCrawl
 }
 
-async function test (state = {}, funcList) {
-   args.reduce(async (sum, currentFunc) => {
-    const newState = await Crawler[currentFunc](sum)
-    return newState
-  }, state)
-}
+// async function test (state = {}, funcList) {
+//    args.reduce(async (sum, currentFunc) => {
+//     const newState = await Crawler[currentFunc](sum)
+//     return newState
+//   }, state)
+// }
 
 
 // Post - Parameters (rules) - validates it
 // Cron - Parses Parameters (figure out what it needs to run)
 // Clean state aka puppeteer page, DONT MUTATE
 
-let recps = {}
-
-function addObj(obj) {
-  return {...obj, 1: 'asdfasdf'}
-}
-
-let newobj = addObj(recps)
+// let recps = {}
+//
+// function addObj(obj) {
+//   return {...obj, 1: 'asdfasdf'}
+// }
+//
+// let newobj = addObj(recps)

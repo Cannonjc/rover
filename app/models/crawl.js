@@ -66,7 +66,7 @@ CrawlSchema.statics.startCrawler = function(cb) {
   if (this.countStatus('queued') > 0) {
     return;
   } else {
-    this.updateMany({status: 'received'},{ $set: {status: 'queued'}})
+    this.updateMany({status: 'received'},{ $set: {status: 'queued'}}).sort({createdAt: 'asc'})
     .then(crawls => {
       Async.mapLimit(crawls, 4, (crawl) => crawl.crawl(), (error, results) => {
         return cb(error, results);
