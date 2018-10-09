@@ -1,7 +1,7 @@
 const express     = require('express');
 const bodyParser  = require('body-parser');
-const logger      = require('morgan');
-const crons       = require('./workers');
+// const logger      = require('morgan');
+// const crons       = require('./workers');
 const MONGO_URL   = process.env.MONGODB_URI || 'mongodb://localhost:27017/rover'
 
 const app         = express();
@@ -13,7 +13,7 @@ mongoose.set('useCreateIndex', true)
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
-app.use(logger('info'));
+// app.use(logger('info'));
 
 require('./app/routes')(app);
 app.listen(port, () => {

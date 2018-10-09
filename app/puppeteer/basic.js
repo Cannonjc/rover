@@ -1,3 +1,5 @@
+const puppeteer = require('puppeteer');
+
 async function pageScreenshot(url) {
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
@@ -23,3 +25,9 @@ async function pageScreenshotAndHTML(url) {
   await browser.close();
   return [screenshot,html];
 };
+
+module.exports = {
+  pageScreenshot: pageScreenshot,
+  pageHTML: pageHTML,
+  pageScreenshotAndHTML: pageScreenshotAndHTML
+}

@@ -1,395 +1,311 @@
 const puppeteer = require('puppeteer');
 const xPathToCss = require('xpath-to-css');
-const fs = require('fs');
-const mkdirp = require('mkdirp');
 const axios = require('axios');
 
-let recipe = {};
-let storage = {};
-let pageNum = 0;
-let initData = {};
-
-async function pageScreenshot(url, cb) {
-  const browser = await puppeteer.launch();
-  const page = await browser.newPage();
-  await page.goto(url);
-  let screenshot = await page.screenshot({fullPage: true});
-  await browser.close();
-  cb(screenshot);
-};
-async function pageHTML(url, cb) {
-  const browser = await puppeteer.launch();
-  const page = await browser.newPage();
-  await page.goto(url);
-  let html = await page.content();
-  await browser.close();
-  cb(html);
-};
-async function pageScreenshotAndHTML(url,cb) {
-  const browser = await puppeteer.launch();
-  const page = await browser.newPage();
-  await page.goto(url);
-  let screenshot = await page.screenshot({fullPage: true});
-  let html = await page.content();
-  await browser.close();
-  cb(screenshot,html);
-};
-
-async function mainCrawl(params, cb) {
-  if (checkInitData(params['initialize'])) {
-    cb("");
-  } else {
-    cb("Initialize data is not complete");
-    return;
-  }
-  recipe = params;
-  const browser = await puppeteer.launch({});
-  const page = await browser.newPage();
-
-  for (var key in recipe) {
-    if (recipe.error) {
-      sendError(recipe.error);
-      break;
-    } else {
-      await decider(page, key, recipe);
+class Crawler {
+  constructor(crawl) {
+    this.commandList = crawl.commandList;
+    this.state = {
+      startUrl : crawl.startUrl,
+      respondUrl : crawl.respondUrl,
+      errorUrl : crawl.errorUrl,
+      crawlID : crawl.crawlID,
+      dimensionID : crawl.dimensionID,
+      nextPage : crawl.nextPage || '',
+      backButton : crawl.backButton || '',
+      linksSelector: crawl.linksSelector,
+      pageNum : 0,
+      formsList : crawl.formsList,
+      formsCount : 0,
+      clicksList : crawl.clicksList,
+      clicksCount : 0,
+      error: '',
+      errorSent: false
     }
   }
-  // await page.waitFor(4000);
-  await browser.close();
-};
 
-async function decider(page, key, params) {
-  console.log(key);
-  // console.log(params[key]);
-  switch(key) {
-    case 'initialize':
-      await initialize(params[key])
-      break;
-    case 'start_url':
-      await startUrl(page, params[key]);
-      break;
-    case 'form':
-      await fillForm(page, params[key]);
-      break;
-    case 'screenshot':
-      storage[params[key]] = await page.screenshot({fullPage:true});
-      break;
-    case 'html':
-      storage[params[key]] = await page.content();
-      break;
-    case 'record_links':
-      await traverseLinks(page, params[key]);
-      break;
-    case 'click':
-      await click(page, params[key]);
-      break;
-    // case 'save_and_erase':
-    //   await save_and_erase();
-    //   break;
-    // case 'send_record':
-    //   sendRecord(storage['record_screenshot'],storage['records_html'],storage['details_screenshot'],storage['details_html']);
-    //   break;
-    // case 'record_detail_links':
-      // await traverseLinks();
-      // break;
-    default:
-      break;
-  }
-};
-
-function checkInitData(initialize) {
-  if (initialize['respond_url'] && initialize['error_url'] && initialize['crawl_id'] && initialize['dimension_id']) {
-    recipe = {};
-    storage = {};
-    pageNum = 0;
-    initData = {};
-    return true;
-  } else {
-    return false;
-  }
-}
-async function initialize(params) {
-  if (params['respond_url'] && params['error_url'] && params['crawl_id'] && params['dimension_id']) {
-    initData.respondUrl = params['respond_url'];
-    initData.errorUrl = params['error_url'];
-    initData.crawlID = params['crawl_id'];
-    initData.dimensionID = params['dimension_id'];
-    if (params['next_page']) initData.nextPage = params['next_page'];
-    if (params['back_button']) initData.backButton = params['back_button'];
-  } else {
-    await setErrorInRecipe("Initialize data is not complete");
-  }
-}
-
-async function startUrl(page, url) {
-  console.log("Start url: ",url)
-  await Promise.all([
-    page.waitForNavigation(),
-    page.goto(url)
-  ]);
-};
-
-async function traverseLinks(page, linksInfo) {
-  console.log('linksInfo');
-  let links = [];
-  try {
-    links = await getLinksFromXPathSelector(page, linksInfo['links_selector']);
-  } catch (e) {
-    setErrorInRecipe(linksInfo['links_selector']);
-    return;
+  async startCrawl() {
+    console.log("Started crawl");
+    // console.log(this.state);
+    this.browser = await puppeteer.launch({headless: false});
+    this.state.page = await this.browser.newPage();
+    // console.log(this.state);
+    await this.runCommands(this.state);
+    await this.browser.close();
+    return this.state;
   }
 
-  for (i = 0; i < links.length; i++) {
-    await goToDetailsPage(page, links[i], linksInfo['record']);
-    sendRecord(i,storage['records_screenshot'],storage['records_html'],storage['details_screenshot'],storage['details_html']);
+  async runCommands(state) {
+    return this.commandList.reduce( (chain, currentFunc) => {
+      return chain.then((state) => {
+        if (state.error) {
+          if (!state.errorSent) {
+            this.sendError(state);
+            this.error = state.error;
+            return {...state, errorSent: true}
+          } else {
+            return {...state}
+          }
+        } else {
+          return this.decider(currentFunc, state);
+        }
+      });
+    }, Promise.resolve(this.state));
   }
-  if (await nextPageExists(page)) {
-    console.log("MORE");
-    storage['records_html'] = await page.content();
-    storage['records_screenshot'] = await page.screenshot({fullPage:true});
-    await traverseLinks(page, linksInfo);
+
+  async decider(currentFunc, currentState) {
+    switch(currentFunc) {
+      case 'start_url':
+        return await this.startUrl(currentState);
+        break;
+      case 'form':
+        return await this.fillForm(currentState);
+        break;
+      case 'records_screenshot':
+        return {...currentState, records_screenshot: await currentState.page.screenshot({fullpage:true})};
+        break;
+      case 'records_html':
+        return {...currentState, records_html: await currentState.page.content()};
+        break;
+      case 'record_links':
+        return await this.resultsPage(currentState);
+        break;
+      case 'click':
+        return await this.commandClick(currentState);
+        break;
+      default:
+        break;
+    }
   }
-};
-async function goToDetailsPage(page,link, linkInfo) {
-  console.log('going to link: ', link);
-  await Promise.all([
-    page.waitForNavigation(),
-    page.goto(link)
-  ]);
-  for (var key in linkInfo) {
-    await decider(page, key, linkInfo);
+
+  async startUrl(state) {
+    const newPage = state.page
+    await Promise.all([
+      newPage.waitForNavigation(),
+      newPage.goto(state.startUrl)
+    ]);
+    return {...state, page: newPage};
   }
-  await goBack(page);
-};
-async function nextPageExists(page) {
-  console.log("exists?")
-  if (initData.nextPage) {
+
+  async commandClick(state) {
+    const newPage = state.page
+    const selector = state.clicksList[state.clicksCount]
+    // console.log(await this.convertXPath(selector))
     try {
-      await Promise.all([
-        page.waitForNavigation(),
-        page.click(convertXPath(initData.nextPage,setErrorInRecipe))
-      ]);
-      console.log("next page")
-      pageNum+=1;
-      return true;
+      await newPage.click(await this.convertXPath(selector))
+      return {...state, page: newPage, clicksCount: state.clicksCount+1};
     } catch(e) {
-      console.log("no next page")
-      return false;
+      console.log("Error clicking")
+      return {...state, error: e}
     }
   }
-  return false;
-}
-async function sendRecord(index,recordsScreenshot, recordsHtml, detailsScreenshot, detailsHtml) {
-  console.log("sending ", index);
-  // console.log(initData.respondUrl);
-  console.log("page_num: ", pageNum);
-  let buffedRS = Buffer.from(recordsScreenshot).toString('base64');
-  let buffedRH = Buffer.from(recordsHtml).toString('base64');
-  let buffedDS = Buffer.from(detailsScreenshot).toString('base64');
-  let buffedDH = Buffer.from(detailsHtml).toString('base64');
-  axios({
-    method: 'post',
-    url: initData.respondUrl,
-    data: {
-      crawl_id: initData.crawlID,
-      dimension_id: initData.dimensionID,
-      link_num: index,
-      page_num: pageNum,
-      records_screenshot: buffedRS,
-      records_html: buffedRH,
-      details_screenshot: buffedDS,
-      details_html: buffedDH
-    }
-  }).catch(function (error) {
-    // handle error
-    console.log('error sending the record back: ', error);
-  });
-};
 
-async function fillForm(page,keyValues) {
-  console.log('filling form');
-  // console.log(keyValues);
-  for (var key in keyValues) {
-    // console.log(key);
-    // console.log(keyValues[key]);
-    if (recipe.error) {
-      sendError(recipe.error);
-      break;
-    } else {
-      switch(key) {
-        case 'text_field':
-          await textFieldFill(page, keyValues[key]);
-          break;
-        case 'select':
-          await selectFill(page, keyValues[key]);
-          break;
-        case 'submit':
-          await click(page,keyValues[key]);
-          break;
-        default:
-          break;
+  async textFieldFill(page, selectorsValues) {
+    console.log('Filling text fields')
+    for (var selector in selectorsValues) {
+      try {
+        // console.log(selector);
+        // console.log(await this.convertXPath(selector));
+        await page.click(await this.convertXPath(selector));
+        await page.keyboard.type(selectorsValues[selector]);
+      } catch(e) {
+        console.log("Error filling out text fields");
+        break;
       }
     }
   }
-};
-async function textFieldFill(page, selectorsValues) {
-  console.log('Filling text fields');
-  for (var selector in selectorsValues) {
-    // console.log(selector);
-    // console.log(convertXPath(selector,setErrorInRecipe));
-    try {
-      await page.click(convertXPath(selector,setErrorInRecipe));
-      await page.keyboard.type(selectorsValues[selector]);
-    } catch(e) {
-      console.log("Error filling out text fields");
-      break;
+  async selectFill(page, selectorsValues) {
+    console.log('selectors fields')
+    for (var selector in selectorsValues) {
+      try {
+        await page.select(await this.convertXPath(selector), selectorsValues[selector]);
+      } catch(e) {
+        console.log("Error in select on form");
+        break;
+      }
     }
   }
-};
-async function selectFill(page, selectorsValues) {
-  console.log('selectors fields');
-  for (var selector in selectorsValues) {
-    try {
-      await page.select(convertXPath(selector,setErrorInRecipe), selectorsValues[selector]);
-    } catch(e) {
-      console.log("Error in select on form");
-      break;
-    }
-  }
-};
 
-async function goBack(page) {
-  if (initData.backButton) {
-    try {
-      Promise.all([
-        page.waitForNavigation(),
-        page.goto(convertXPath(initData.backButton,setErrorInRecipe))
-      ]);
-    } catch(e) {
-      console.log("Error in back button");
+  async fillForm(state) {
+    console.log('filling form');
+    // console.log(keyValues);
+    const keyValues = state.formsList[state.formsCount]
+    const newPage = state.page
+    for (var key in keyValues) {
+      if (state.error) {
+        sendError(state.error);
+        break;
+      } else {
+        switch(key) {
+          case 'text_field':
+            await this.textFieldFill(newPage, keyValues[key]);
+            break;
+          case 'select':
+            await this.selectFill(newPage, keyValues[key]);
+            break;
+          default:
+            break;
+        }
+      }
     }
-  } else {
+    return {...state, page: newPage, formsCount: state.formsCount+1}
+  }
+
+  async resultsPage(state) {
+    console.log('linksInfo');
+    const newPage = await state.page;
+    const resultsScreenshot = await newPage.screenshot({fullPage: true});
+    const resultsHtml = await newPage.content();
+    let links = []
+    try {
+      links = await this.getLinksFromXPathSelector(state);
+    } catch (e) {
+      console.log("error getting links");
+      return {...state, error: e};
+    }
+    for (let i = 0; i < links.length; i++) {
+      const detailsArr = await this.goToDetailsPage(state, links[i]);
+      this.sendRecord(i,state,resultsScreenshot,resultsHtml,detailsArr[0],detailsArr[1]);
+    }
+    console.log("next page? ", state.nextPage);
+    if (state.nextPage) {
+      console.log("YES")
+      const pageNum = state.pageNum
+      const newState = await this.nextPageExists(state);
+      if (!newState.error && pageNum != newState.pageNum) {
+        console.log("No error - next page")
+        return await this.resultsPage(newState);
+      }
+    }
+    return {...state, page: newPage};
+  }
+  async goToDetailsPage(state,link) {
+    const page = state.page
+    console.log('going to link: ', link);
     await Promise.all([
-  		page.waitForNavigation(),
-  		page.goBack()
-  	]);
-  }
-}
-
-async function click(page,selector) {
-  await page.click(convertXPath(selector, setErrorInRecipe)).catch(e => console.log('Click error on: ',selector));
-}
-
-// async function save_and_erase() {
-//   let path = await 'screenshots/item'+recordCount;
-//   await makeDirectory(path);
-//   await makeDirectory(path+'/base');
-//   await makeDirectory(path+'/record');
-//   await saveFile(path+'/base/base.html',storage['records_html']);
-//   await saveFile(path+'/base/base.png',storage['records_screenshot']);
-//   await saveFile(path+'/record/record.html',storage['details_html']);
-//   await saveFile(path+'/record/record.png',storage['details_screenshot']);
-//   delete storage['record_html'];
-//   delete storage['record_screenshot'];
-//   await recordCount++;
-// };
-// async function makeDirectory(path) {
-// 	mkdirp(path, function(err) {
-// 		if (err) throw err;
-// 	});
-// };
-// async function saveFile(path, content) {
-// 	await fs.writeFile(path, content, (err) => {
-// 		if (err) throw err;
-// 	});
-// };
-// function makeDirectory(path) {
-//     return new Promise((resolve, reject) => {
-//         mkdirp(path, function(err) {
-//             if (err) return reject(err);
-//             return resolve();
-//         });
-//     })
-// };
-// function saveFile(path, content) {
-//     return new Promise((resolve, reject) => {
-//         fs.writeFile(path, content, (err) => {
-//             if (err) return reject(err);
-//             return resolve();
-//         });
-//     })
-// };
-function convertXPath(xpath, cb) {
-  try {
-    let myConversion = xPathToCss(xpath)
-    return myConversion;
-  } catch(e) {
-    cb(xpath);
-  }
-}
-
-function setErrorInRecipe(e) {
-  console.log(e);
-  console.log("setting error in recipe");
-  recipe.error = e;
-}
-
-async function sendError(e) {
-  axios({
-    method: 'post',
-    url: initData.errorUrl,
-    dimension_id: initData.dimensionID,
-    page_num: pageNum,
-    data: {
-      crawl_id: initData.crawlID,
-      error: e
+      page.waitForNavigation(),
+      page.goto(link)
+    ]);
+    const detailsScreenshot = await page.screenshot({fullPage:true});
+    const detailsHtml = await page.content();
+    console.log("going back");
+    await this.goBack(state);
+    return [detailsScreenshot, detailsHtml];
+  };
+  async nextPageExists(state) {
+    let converted = ''
+    try {
+      converted = await this.convertXPath(state.nextPage)
+    } catch (e) {
+      return {...state, error: e}
     }
-  }).then((response) => {
+    try {
+      await Promise.all([
+        state.page.waitForNavigation(),
+        state.page.click(converted)
+      ]);
+      console.log("next page")
+      return {...state, pageNum: state.pageNum+1}
+    } catch(e) {
+      console.log("No link for next page")
+      return {...state}
+    }
+  }
 
-  }).catch((error) => {
-    console.log("We hit an error with sending the error: ",error.message)
-  });
-}
+  async sendRecord(index, state, recordsScreenshot, recordsHtml, detailsScreenshot, detailsHtml) {
+    console.log("sending ", index);
+    // console.log(initData.respondUrl);
+    console.log("page_num: ", state.pageNum);
+    let buffedRS = Buffer.from(recordsScreenshot).toString('base64');
+    let buffedRH = Buffer.from(recordsHtml).toString('base64');
+    let buffedDS = Buffer.from(detailsScreenshot).toString('base64');
+    let buffedDH = Buffer.from(detailsHtml).toString('base64');
+    axios({
+      method: 'post',
+      url: state.respondUrl,
+      data: {
+        crawl_id: state.crawlID,
+        dimension_id: state.dimensionID,
+        link_num: index,
+        page_num: state.pageNum,
+        records_screenshot: buffedRS,
+        records_html: buffedRH,
+        details_screenshot: buffedDS,
+        details_html: buffedDH
+      }
+    }).catch(function (error) {
+      // handle error
+      // console.log('error sending the record back: ', error);
+    });
+  };
 
-async function getLinksFromXPathSelector(page,selector) {
-  console.log('links selector');
-  // console.log(selector);
-  const links = await page.evaluate((mySelector) => {
-		let results = [];
-  	let query = document.evaluate(mySelector,
-      document,
-      null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-	  for (let i=0, length=query.snapshotLength; i<length; ++i) {
-	    results.push(query.snapshotItem(i).href);
-	  }
-		return results;
-	}, selector);
-  return links;
-};
+  async goBack(state) {
+    const newPage = state.page
+    if (state.backButton) {
+      try {
+        Promise.all([
+          newPage.waitForNavigation(),
+          newPage.click(await convertXPath(state.backButton))
+        ]);
+      } catch(e) {
+        console.log("Error in back button");
+        return {...state, error: e};
+      }
+    } else {
+      await Promise.all([
+    		newPage.waitForNavigation(),
+    		newPage.goBack()
+    	]);
+    }
+    return {...state, page: newPage}
+  }
 
-module.exports = {
-  pageScreenshot: pageScreenshot,
-  pageHTML: pageHTML,
-  pageScreenshotAndHTML: pageScreenshotAndHTML,
-  mainCrawl: mainCrawl
-}
+  async sendError(state) {
+    axios({
+      method: 'post',
+      url: state.errorUrl,
+      dimension_id: state.dimensionID,
+      page_num: state.pageNum,
+      data: {
+        crawl_id: state.crawlID,
+        error: state.error
+      }
+    }).then((response) => {
 
-// async function test (state = {}, funcList) {
-//    args.reduce(async (sum, currentFunc) => {
-//     const newState = await Crawler[currentFunc](sum)
-//     return newState
-//   }, state)
-// }
+    }).catch((error) => {
+      console.log("We hit an error with sending the error: ",error.message)
+    });
+  }
+
+  async getLinksFromXPathSelector(state) {
+    const newPage = state.page
+    console.log('links selector');
+    // console.log(selector);
+    const links = await newPage.evaluate((mySelector) => {
+  		let results = [];
+    	let query = document.evaluate(mySelector,
+        document,
+        null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+  	  for (let i=0, length=query.snapshotLength; i<length; ++i) {
+  	    results.push(query.snapshotItem(i).href);
+  	  }
+  		return results;
+  	}, state.linksSelector);
+    return links;
+  }
+
+  async convertXPath(xpath) {
+    console.log("converting xpath");
+    console.log("xpath: ", xpath);
+    try {
+      let myConversion = xPathToCss(xpath)
+      return myConversion;
+    } catch(e) {
+      return new Error(xpath);
+    }
+  }
 
 
-// Post - Parameters (rules) - validates it
-// Cron - Parses Parameters (figure out what it needs to run)
-// Clean state aka puppeteer page, DONT MUTATE
+} // End of Crawler Object
 
-// let recps = {}
-//
-// function addObj(obj) {
-//   return {...obj, 1: 'asdfasdf'}
-// }
-//
-// let newobj = addObj(recps)
+module.exports = Crawler
